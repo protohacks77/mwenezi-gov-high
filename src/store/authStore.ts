@@ -73,7 +73,7 @@ export const useAuthStore = create<AuthState>()(
       checkAuth: () => {
         const { user } = get()
         const isAuthenticated = !!user
-        console.log('🔍 Auth check:', { hasUser: !!user, isAuthenticated })
+        console.log('🔍 Auth check:', { hasUser: !!user, isAuthenticated, username: user?.username })
         set({ isAuthenticated })
       },
 

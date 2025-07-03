@@ -27,18 +27,26 @@ function App() {
   const { isAuthenticated, user, checkAuth } = useAuthStore()
   const { subscribeToStudents, subscribeToTransactions, subscribeToConfig, subscribeToNotifications } = useDataStore()
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [isInitializing, setIsInitializing] = useState(true)
 
   useEffect(() => {
+    // Initialize app immediately without blocking UI
     const initializeApp = async () => {
       try {
         console.log('🚀 Initializing application...')
-        await seedInitialData()
+        
+        // Check authentication first
         checkAuth()
+        
+        // Initialize database in background (non-blocking)
+        seedInitialData().catch(error => {
+          console.error('⚠️ Background database initialization error:', error)
+          // Don't block the app if seeding fails
+        })
+        
+        console.log('✅ App initialization complete')
       } catch (error) {
-        console.error('💥 Failed to initialize app:', error)
-      } finally {
-        setIsInitializing(false)
+        console.error('💥 App initialization error:', error)
+        // Don't block the app even if initialization fails
       }
     }
 
@@ -48,6 +56,7 @@ function App() {
   useEffect(() => {
     if (isAuthenticated && user) {
       console.log('🔗 Setting up real-time subscriptions for user:', user.username)
+      
       // Subscribe to real-time data
       const unsubscribeStudents = subscribeToStudents()
       const unsubscribeTransactions = subscribeToTransactions()
@@ -64,21 +73,7 @@ function App() {
     }
   }, [isAuthenticated, user, subscribeToStudents, subscribeToTransactions, subscribeToConfig, subscribeToNotifications])
 
-  if (isInitializing) {
-    return (
-      <div className="min-h-screen bg-slate-primary flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-maroon-primary rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-white font-bold text-2xl">M</span>
-          </div>
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-primary mx-auto mb-4" />
-          <p className="text-white font-medium">Initializing Mwenezi High Fees Management...</p>
-          <p className="text-slate-400 text-sm mt-2">Setting up database and authentication</p>
-        </div>
-      </div>
-    )
-  }
-
+  // Show login form if not authenticated
   if (!isAuthenticated) {
     return (
       <>

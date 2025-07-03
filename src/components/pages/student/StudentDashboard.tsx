@@ -5,9 +5,8 @@ import {
   DollarSign, 
   Receipt, 
   AlertCircle,
-  LogOut,
-  Settings,
-  ExternalLink
+  ExternalLink,
+  CheckCircle
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,7 +16,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import toast from 'react-hot-toast'
 
 export function StudentDashboard() {
-  const { user, logout } = useAuthStore()
+  const { user } = useAuthStore()
   const { students, transactions, config } = useDataStore()
   const [isProcessingPayment, setIsProcessingPayment] = useState(false)
 
@@ -97,6 +96,8 @@ export function StudentDashboard() {
   const unpaidTerms = Object.entries(student.financials.terms)
     .filter(([_, term]) => term.fee > term.paid)
 
+  const isFullyPaid = student.financials.balance <= 0
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -108,20 +109,6 @@ export function StudentDashboard() {
           <p className="text-slate-400 mt-1">
             {student.grade} • {student.studentType} • ID: {student.studentNumber}
           </p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <Button variant="outline" size="sm" className="border-slate-600 text-slate-300">
-            <Settings className="w-4 h-4 mr-2" />
-            Settings
-          </Button>
-          <Button 
-            onClick={logout}
-            variant="destructive" 
-            size="sm"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Logout
-          </Button>
         </div>
       </div>
 
@@ -142,6 +129,12 @@ export function StudentDashboard() {
               }`}>
                 {formatCurrency(student.financials.balance)}
               </p>
+              {isFullyPaid && (
+                <div className="flex items-center justify-center mt-2">
+                  <CheckCircle className="w-4 h-4 text-green-400 mr-1" />
+                  <span className="text-green-400 text-sm">Fully Paid</span>
+                </div>
+              )}
             </div>
             <div className="text-center">
               <p className="text-slate-400 text-sm">Total Fees</p>
@@ -163,8 +156,8 @@ export function StudentDashboard() {
         </CardContent>
       </Card>
 
-      {/* Unpaid Terms */}
-      {unpaidTerms.length > 0 && (
+      {/* Unpaid Terms or Success Message */}
+      {unpaidTerms.length > 0 ? (
         <Card className="bg-slate-secondary border-slate-700">
           <CardHeader>
             <CardTitle className="text-white flex items-center">
@@ -217,6 +210,20 @@ export function StudentDashboard() {
             </div>
           </CardContent>
         </Card>
+      ) : (
+        <Card className="bg-green-500/10 border-green-500/20">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-center space-x-3">
+              <CheckCircle className="w-8 h-8 text-green-400" />
+              <div className="text-center">
+                <h3 className="text-xl font-bold text-green-400">All Fees Paid!</h3>
+                <p className="text-green-300 text-sm mt-1">
+                  Congratulations! You have no outstanding balance.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Payment History */}
@@ -224,7 +231,7 @@ export function StudentDashboard() {
         <CardHeader>
           <CardTitle className="text-white flex items-center">
             <Receipt className="w-5 h-5 mr-2 text-amber-primary" />
-            Payment History
+            Recent Payment History
           </CardTitle>
           <CardDescription className="text-slate-400">
             Your recent transactions
@@ -233,7 +240,7 @@ export function StudentDashboard() {
         <CardContent>
           <div className="space-y-4">
             {studentTransactions.length > 0 ? (
-              studentTransactions.map((transaction) => (
+              studentTransactions.slice(0, 5).map((transaction) => (
                 <div key={transaction.id} className="flex items-center justify-between p-4 bg-slate-primary rounded-lg">
                   <div>
                     <p className="text-white font-medium">
@@ -260,7 +267,13 @@ export function StudentDashboard() {
                 </div>
               ))
             ) : (
-              <p className="text-slate-400 text-center py-8">No payment history available</p>
+              <div className="text-center py-8">
+                <Receipt className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                <p className="text-slate-400">No payment history available</p>
+                <p className="text-slate-500 text-sm mt-2">
+                  Your payments will appear here once you make them
+                </p>
+              </div>
             )}
           </div>
         </CardContent>

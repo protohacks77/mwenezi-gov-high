@@ -87,16 +87,16 @@ export const subscribeToData = <T>(
 // Initialize database with seed data
 export const seedInitialData = async (): Promise<void> => {
   try {
-    console.log('Checking if database needs initialization...')
+    console.log('🔍 Checking if database needs initialization...')
     
     // Check if data already exists
     const configSnapshot = await get(dbRefs.config())
     if (configSnapshot.exists()) {
-      console.log('Database already initialized')
+      console.log('✅ Database already initialized')
       return
     }
 
-    console.log('Initializing database with seed data...')
+    console.log('🌱 Initializing database with seed data...')
 
     const initialData = {
       config: {
@@ -206,10 +206,10 @@ export const seedInitialData = async (): Promise<void> => {
 
     // Set initial data
     await set(ref(database), initialData)
-    console.log('Database initialized successfully with all required data')
+    console.log('✅ Database initialized successfully with all required data')
   } catch (error) {
-    console.error('Error seeding initial data:', error)
-    throw error
+    console.error('💥 Error seeding initial data:', error)
+    // Don't throw error to prevent blocking the app
   }
 }
 
