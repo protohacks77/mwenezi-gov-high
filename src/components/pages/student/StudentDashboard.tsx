@@ -47,6 +47,12 @@ export function StudentDashboard() {
       const [termKey, term] = unpaidTerm
       const amountDue = term.fee - term.paid
 
+      console.log('🚀 Initiating ZbPay payment:', {
+        studentId: student.id,
+        amount: amountDue,
+        termKey: termKey
+      })
+
       const response = await fetch('/.netlify/functions/initiateZbPayTransaction', {
         method: 'POST',
         headers: {
@@ -56,12 +62,21 @@ export function StudentDashboard() {
           studentId: student.id,
           amount: amountDue,
           termKey: termKey,
-          returnUrl: `${window.location.origin}/#/student/payment-status`,
-          resultUrl: `${window.location.origin}/.netlify/functions/zbPayWebhookHandler`
+          returnUrl: `https://mwenezipayfees.netlify.app/#/student/payment-status`,
+          resultUrl: `https://mwenezipayfees.netlify.app/.netlify/functions/zbPayWebhookHandler`
         })
       })
 
+      console.log('📡 ZbPay response status:', response.status)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ ZbPay response error:', errorText)
+        throw new Error(`HTTP ${response.status}: ${errorText}`)
+      }
+
       const data = await response.json()
+      console.log('📦 ZbPay response data:', data)
 
       if (data.success && data.paymentUrl) {
         // Store transaction details for status checking
@@ -72,14 +87,15 @@ export function StudentDashboard() {
           termKey: termKey
         }))
         
+        console.log('✅ Redirecting to ZbPay:', data.paymentUrl)
         // Redirect to ZbPay
         window.location.href = data.paymentUrl
       } else {
         throw new Error(data.error || 'Failed to initiate payment')
       }
     } catch (error) {
-      console.error('Payment initiation error:', error)
-      toast.error('Failed to initiate payment. Please try again.')
+      console.error('💥 Payment initiation error:', error)
+      toast.error(`Failed to initiate payment: ${error.message}`)
     } finally {
       setIsProcessingPayment(false)
     }

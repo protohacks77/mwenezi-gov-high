@@ -79,6 +79,9 @@ export const subscribeToData = <T>(
   const listener = onValue(reference, (snapshot) => {
     const data = snapshot.exists() ? snapshot.val() : null
     callback(data)
+  }, (error) => {
+    console.error('Firebase subscription error:', error)
+    callback(null)
   })
   
   return () => off(reference, 'value', listener)
@@ -204,7 +207,7 @@ export const seedInitialData = async (): Promise<void> => {
       notifications: {}
     }
 
-    // Set initial data
+    // Set initial data with proper error handling
     await set(ref(database), initialData)
     console.log('✅ Database initialized successfully with all required data')
   } catch (error) {

@@ -66,6 +66,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     
     setIsLoading(true)
     try {
+      console.log('🔐 Updating password for user:', user.username)
+      
       const response = await fetch('/.netlify/functions/updateUserPassword', {
         method: 'POST',
         headers: {
@@ -79,7 +81,16 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         })
       })
 
+      console.log('📡 Password update response status:', response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ Password update error:', errorText)
+        throw new Error(`HTTP ${response.status}: ${errorText}`)
+      }
+
       const result = await response.json()
+      console.log('📦 Password update result:', result)
 
       if (result.success) {
         toast.success('Password updated successfully!')
@@ -88,8 +99,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         toast.error(result.error || 'Failed to update password')
       }
     } catch (error) {
-      console.error('Password update error:', error)
-      toast.error('Failed to update password. Please try again.')
+      console.error('💥 Password update error:', error)
+      toast.error(`Failed to update password: ${error.message}`)
     } finally {
       setIsLoading(false)
     }
@@ -100,6 +111,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     
     setIsLoading(true)
     try {
+      console.log('👤 Updating username for user:', user.username)
+      
       const response = await fetch('/.netlify/functions/updateUsername', {
         method: 'POST',
         headers: {
@@ -113,7 +126,16 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         })
       })
 
+      console.log('📡 Username update response status:', response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ Username update error:', errorText)
+        throw new Error(`HTTP ${response.status}: ${errorText}`)
+      }
+
       const result = await response.json()
+      console.log('📦 Username update result:', result)
 
       if (result.success) {
         toast.success('Username updated successfully!')
@@ -122,8 +144,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         toast.error(result.error || 'Failed to update username')
       }
     } catch (error) {
-      console.error('Username update error:', error)
-      toast.error('Failed to update username. Please try again.')
+      console.error('💥 Username update error:', error)
+      toast.error(`Failed to update username: ${error.message}`)
     } finally {
       setIsLoading(false)
     }

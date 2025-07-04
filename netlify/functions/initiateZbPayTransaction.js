@@ -74,7 +74,7 @@ exports.handler = async (event, context) => {
     const body = JSON.parse(event.body)
     const validatedData = initiatePaymentSchema.parse(body)
 
-    console.log('Initiating ZbPay transaction:', validatedData)
+    console.log('🚀 Initiating ZbPay transaction:', validatedData)
 
     // Get student data
     const studentSnapshot = await get(ref(db, `students/${validatedData.studentId}`))
@@ -97,7 +97,7 @@ exports.handler = async (event, context) => {
     const orderReference = generateOrderReference()
     const transactionId = generateTransactionId()
 
-    console.log('Generated IDs:', { orderReference, transactionId })
+    console.log('🔑 Generated IDs:', { orderReference, transactionId })
 
     // Create pending transaction record
     const pendingTransaction = {
@@ -116,7 +116,7 @@ exports.handler = async (event, context) => {
 
     // Save pending transaction to database
     await set(ref(db, `transactions/${transactionId}`), pendingTransaction)
-    console.log('Saved pending transaction to database')
+    console.log('💾 Saved pending transaction to database')
 
     // Prepare ZbPay request
     const zbPayRequest = {
@@ -130,7 +130,7 @@ exports.handler = async (event, context) => {
       termKey: validatedData.termKey
     }
 
-    console.log('ZbPay request payload:', zbPayRequest)
+    console.log('📡 ZbPay request payload:', zbPayRequest)
 
     // Make request to ZbPay API
     const zbPayResponse = await fetch(`${ZBPAY_BASE_URL}/payments/initiate-transaction`, {
@@ -143,12 +143,13 @@ exports.handler = async (event, context) => {
       body: JSON.stringify(zbPayRequest)
     })
 
-    console.log('ZbPay response status:', zbPayResponse.status)
+    console.log('📡 ZbPay response status:', zbPayResponse.status)
     
     const zbPayData = await zbPayResponse.json()
-    console.log('ZbPay response data:', zbPayData)
+    console.log('📦 ZbPay response data:', zbPayData)
 
     if (!zbPayResponse.ok) {
+      console.error('❌ ZbPay API error:', zbPayData)
       throw new Error(`ZbPay API error: ${zbPayData.message || 'Unknown error'}`)
     }
 
@@ -158,7 +159,7 @@ exports.handler = async (event, context) => {
       updatedAt: new Date().toISOString()
     })
 
-    console.log('Updated transaction with ZbPay response')
+    console.log('✅ Updated transaction with ZbPay response')
 
     return {
       statusCode: 200,
@@ -176,7 +177,7 @@ exports.handler = async (event, context) => {
     }
 
   } catch (error) {
-    console.error('Error initiating ZbPay transaction:', error)
+    console.error('💥 Error initiating ZbPay transaction:', error)
     
     return {
       statusCode: 400,
