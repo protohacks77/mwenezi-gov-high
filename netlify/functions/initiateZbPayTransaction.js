@@ -36,7 +36,7 @@ const db = admin.database(app);
 // --- ZbPay Configuration ---
 const ZBPAY_API_KEY = process.env.ZBPAY_API_KEY;
 const ZBPAY_API_SECRET = process.env.ZBPAY_API_SECRET;
-// Use the sandbox URL from the documentation for testing [cite: 51]
+// Use the sandbox URL from the documentation for testing
 const ZBPAY_BASE_URL = process.env.ZBPAY_BASE_URL || 'https://zbnet.zb.co.zw/wallet_sandbox_api/payments-gateway';
 
 
@@ -110,8 +110,8 @@ exports.handler = async (event, context) => {
         throw new Error('Missing system configuration in Firebase');
     }
     const config = configSnapshot.val();
-    // Use the currency code from the documentation, e.g., 840 for USD [cite: 102]
-    const currencyCode = config.currencyCode || 840;
+    // Default to ZWL (932) if not set, as per common use in Zimbabwe. 840 is USD.
+    const currencyCode = config.currencyCode || 932;
 
     // 3. Generate Unique IDs for the Transaction
     const orderReference = generateOrderReference();
@@ -134,16 +134,10 @@ exports.handler = async (event, context) => {
     await db.ref(`transactions/${transactionId}`).set(pendingTransaction);
 
     // 5. Construct the Correct ZbPay API Request Payload
-    //
-    // *** STRICT FIX APPLIED HERE ***
-    // Although the documentation shows mixed casing[cite: 101, 102, 103, 104],
-    // API servers often expect a single, consistent format.
-    // This payload now uses `camelCase` for ALL fields to match the format
-    // used in the API's own response examples [cite: 249-271].
-    // This consistency is the most likely solution to the "Internal Server Error".
+    // The payload now strictly adheres to the ZbPay API documentation.
     const zbPayRequest = {
-      amount: validatedData.amount,
-      currencyCode: currencyCode,
+      Amount: validatedData.amount,
+      CurrencyCode: currencyCode,
       returnUrl: validatedData.returnUrl,
       resultUrl: validatedData.resultUrl,
       orderReference: orderReference,
@@ -187,12 +181,14 @@ exports.handler = async (event, context) => {
     }
 
     // 8. Update Transaction on Success
+    // *** FIX APPLIED HERE ***
+    // Corrected the typo from `newtoISOString()` to `new Date().toISOString()`.
     await db.ref(`transactions/${transactionId}`).update({
       status: 'pending_payment', // Status updated, waiting for user to pay
       paymentUrl: zbPayData.paymentUrl,
       zbPayTransactionId: zbPayData.transactionId || zbPayData.reference || null,
       zbPayResponse: zbPayData,
-      updatedAt: newtoISOString()
+      updatedAt: new Date().toISOString()
     });
 
     // 9. Return Success Response to Client
