@@ -1,58 +1,76 @@
-const { getDatabase, ref, get } = require('firebase-admin/database')
-const { initializeApp, cert } = require('firebase-admin/app')
+
+const admin = require('firebase-admin'); // Import the main firebase-admin module
+// No need for 'z' (zod) if not used in this specific function
 
 // Initialize Firebase Admin
-let app
+let app;
 try {
-  app = require('firebase-admin').app()
+  // Check if an app instance already exists to avoid re-initialization in hot-reloading environments
+  app = admin.app();
 } catch (e) {
-  app = initializeApp({
-    credential: cert({
+  // If no app exists, initialize a new one
+  app = admin.initializeApp({
+    credential: admin.credential.cert({ // Use admin.credential.cert
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      // The replace is crucial if the private key environment variable escapes newlines
       privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
     }),
-    databaseURL: process.env.FIREBASE_DATABASE_URL
-  })
+    databaseURL: process.env.FIREBASE_DATABASE_URL // Ensure this environment variable is set
+  });
 }
 
-const db = getDatabase(app)
+// Get the Realtime Database service instance
+const db = admin.database(app);
 
 // Simple PDF generation using HTML
 function generatePDFContent(data) {
-  const { date, bursarUsername, transactions, summary } = data
-  
+  const { date, bursarUsername, transactions, summary } = data;
+
+  // Basic validation for data to prevent errors in template
+  const safeTransactions = Array.isArray(transactions) ? transactions : [];
+  const safeSummary = summary || { totalAmount: 0, transactionCount: 0 };
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Bursar Daily Report - ${date}</title>
+    <title>Bursar Daily Report - ${new Date(date).toLocaleDateString()}</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .header { text-align: center; margin-bottom: 30px; }
-        .summary { background: #f5f5f5; padding: 15px; margin-bottom: 20px; }
-        .transactions { width: 100%; border-collapse: collapse; }
-        .transactions th, .transactions td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        .transactions th { background-color: #6D282C; color: white; }
-        .total { font-weight: bold; background-color: #f9f9f9; }
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; color: #333; }
+        .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #6D282C; padding-bottom: 15px; }
+        .header h1 { color: #6D282C; margin: 0; font-size: 28px; }
+        .header h2 { color: #555; margin: 5px 0 15px; font-size: 22px; }
+        .header p { margin: 5px 0; font-size: 14px; color: #666; }
+        .summary { background: #f9f9f9; padding: 20px; margin-bottom: 30px; border-radius: 8px; border: 1px solid #eee; }
+        .summary h3 { color: #6D282C; margin-top: 0; margin-bottom: 15px; font-size: 18px; }
+        .summary p { margin: 8px 0; font-size: 15px; }
+        .transactions { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+        .transactions th, .transactions td { border: 1px solid #e0e0e0; padding: 12px; text-align: left; font-size: 14px; }
+        .transactions th { background-color: #6D282C; color: white; text-transform: uppercase; letter-spacing: 0.5px; }
+        .transactions tbody tr:nth-child(even) { background-color: #f5f5f5; }
+        .transactions tbody tr:hover { background-color: #e8e8e8; }
+        .total { font-weight: bold; background-color: #e0e0e0; }
+        .total td { font-size: 16px; padding: 15px 12px; }
+        .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #888; border-top: 1px solid #ddd; padding-top: 15px; }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>Mwenezi High School</h1>
         <h2>Daily Bursar Report</h2>
-        <p>Date: ${new Date(date).toLocaleDateString()}</p>
+        <p>Date: ${new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
         <p>Bursar: ${bursarUsername}</p>
     </div>
-    
+
     <div class="summary">
         <h3>Summary</h3>
-        <p><strong>Total Amount Collected:</strong> $${summary.totalAmount.toFixed(2)}</p>
-        <p><strong>Number of Transactions:</strong> ${summary.transactionCount}</p>
-        <p><strong>Average per Transaction:</strong> $${summary.transactionCount > 0 ? (summary.totalAmount / summary.transactionCount).toFixed(2) : '0.00'}</p>
+        <p><strong>Total Amount Collected:</strong> $${safeSummary.totalAmount.toFixed(2)}</p>
+        <p><strong>Number of Transactions:</strong> ${safeSummary.transactionCount}</p>
+        <p><strong>Average per Transaction:</strong> $${safeSummary.transactionCount > 0 ? (safeSummary.totalAmount / safeSummary.transactionCount).toFixed(2) : '0.00'}</p>
     </div>
-    
+
     <h3>Transaction Details</h3>
     <table class="transactions">
         <thead>
@@ -65,30 +83,34 @@ function generatePDFContent(data) {
             </tr>
         </thead>
         <tbody>
-            ${transactions.map(tx => `
+            ${safeTransactions.length > 0 ? safeTransactions.map(tx => `
                 <tr>
-                    <td>${new Date(tx.createdAt).toLocaleTimeString()}</td>
-                    <td>${tx.studentName}</td>
-                    <td>${tx.receiptNumber}</td>
-                    <td>$${tx.amount.toFixed(2)}</td>
-                    <td>${tx.termKey ? tx.termKey.replace('_', ' ') : 'N/A'}</td>
+                    <td>${new Date(tx.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}</td>
+                    <td>${tx.studentName || 'N/A'}</td>
+                    <td>${tx.receiptNumber || 'N/A'}</td>
+                    <td>$${(tx.amount || 0).toFixed(2)}</td>
+                    <td>${tx.termKey ? tx.termKey.replace(/_/g, ' ') : 'N/A'}</td>
                 </tr>
-            `).join('')}
+            `).join('') : `
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 20px;">No transactions for this date.</td>
+                </tr>
+            `}
             <tr class="total">
                 <td colspan="3"><strong>Total</strong></td>
-                <td><strong>$${summary.totalAmount.toFixed(2)}</strong></td>
+                <td><strong>$${safeSummary.totalAmount.toFixed(2)}</strong></td>
                 <td></td>
             </tr>
         </tbody>
     </table>
-    
-    <div style="margin-top: 30px; text-align: center; font-size: 12px; color: #666;">
-        <p>Generated on ${new Date().toLocaleString()}</p>
+
+    <div class="footer">
+        <p>Generated on ${new Date().toLocaleString('en-US')}</p>
         <p>"Relevant Education for Livelihood"</p>
     </div>
 </body>
 </html>
-  `
+  `;
 }
 
 exports.handler = async (event, context) => {
@@ -101,7 +123,7 @@ exports.handler = async (event, context) => {
         'Access-Control-Allow-Methods': 'POST, OPTIONS'
       },
       body: JSON.stringify({ error: 'Method not allowed' })
-    }
+    };
   }
 
   if (event.httpMethod === 'OPTIONS') {
@@ -113,30 +135,36 @@ exports.handler = async (event, context) => {
         'Access-Control-Allow-Methods': 'POST, OPTIONS'
       },
       body: ''
-    }
+    };
   }
 
   try {
-    const body = JSON.parse(event.body)
-    
+    const body = JSON.parse(event.body);
+
+    // Validate incoming body structure (optional but recommended)
+    if (!body.date || !body.bursarUsername || !Array.isArray(body.transactions) || !body.summary) {
+        throw new Error('Missing required data for report generation.');
+    }
+
     // Generate HTML content
-    const htmlContent = generatePDFContent(body)
-    
+    const htmlContent = generatePDFContent(body);
+
     // For now, return HTML that can be printed as PDF by the browser
-    // In production, you might want to use a service like Puppeteer
+    // In production, you might want to use a service like Puppeteer or a dedicated PDF API
     return {
       statusCode: 200,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'text/html',
-        'Content-Disposition': `attachment; filename="bursar-report-${body.date}-${body.bursarUsername}.html"`
+        'Content-Type': 'text/html', // Set content type to HTML
+        // Suggest a filename for download. Ensure date and username are safe for filenames.
+        'Content-Disposition': `attachment; filename="bursar-report-${body.date.split('T')[0]}-${body.bursarUsername.replace(/\s/g, '_')}.html"`
       },
       body: htmlContent
-    }
+    };
 
   } catch (error) {
-    console.error('Error generating report:', error)
-    
+    console.error('Error generating report:', error);
+
     return {
       statusCode: 400,
       headers: {
@@ -148,6 +176,6 @@ exports.handler = async (event, context) => {
         success: false,
         error: error.message || 'Failed to generate report'
       })
-    }
+    };
   }
-}
+};

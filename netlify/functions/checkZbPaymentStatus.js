@@ -1,38 +1,55 @@
-const { getDatabase, ref, get, update } = require('firebase-admin/database')
-const { initializeApp, cert } = require('firebase-admin/app')
-const { z } = require('zod')
-const fetch = require('node-fetch')
+const admin = require('firebase-admin'); // Import the main firebase-admin module
+const { z } = require('zod'); // Keep Zod if it's used for schema validation
+const fetch = require('node-fetch'); // node-fetch is correctly imported for server-side fetch
 
 // Initialize Firebase Admin
-let app
+let app;
 try {
-  app = require('firebase-admin').app()
+  // Check if an app instance already exists to avoid re-initialization in hot-reloading environments
+  app = admin.app();
 } catch (e) {
-  app = initializeApp({
-    credential: cert({
+  // If no app exists, initialize a new one
+  app = admin.initializeApp({
+    credential: admin.credential.cert({ // Use admin.credential.cert
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      // The replace is crucial if the private key environment variable escapes newlines
       privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
     }),
-    databaseURL: process.env.FIREBASE_DATABASE_URL
-  })
+    databaseURL: process.env.FIREBASE_DATABASE_URL // Ensure this environment variable is set
+  });
 }
 
-const db = getDatabase(app)
+// Get the Realtime Database service instance
+const db = admin.database(app);
 
 // ZbPay API Credentials from environment variables
-const ZBPAY_API_KEY = process.env.ZBPAY_API_KEY || '3f36fd4b-3b23-4249-b65d-f39dc9df42d4'
-const ZBPAY_API_SECRET = process.env.ZBPAY_API_SECRET || '2f2c32d7-7a32-4523-bcde-1913bf7c171d'
-const ZBPAY_BASE_URL = process.env.ZBPAY_BASE_URL || 'https://zbnet.zb.co.zw/wallet_sandbox_api/payments-gateway'
+// IMPORTANT: For production, do NOT use default values for API keys/secrets.
+// Ensure these are always pulled from environment variables.
+const ZBPAY_API_KEY = process.env.ZBPAY_API_KEY;
+const ZBPAY_API_SECRET = process.env.ZBPAY_API_SECRET;
+const ZBPAY_BASE_URL = process.env.ZBPAY_BASE_URL || 'https://zbnet.zb.co.zw/wallet_sandbox_api/payments-gateway';
 
-// Validation schema
+// Validate that API keys are present
+if (!ZBPAY_API_KEY || !ZBPAY_API_SECRET) {
+  console.error("ZBPAY_API_KEY or ZBPAY_API_SECRET environment variables are not set. ZbPay integration may fail.");
+  // In a real application, you might want to throw an error or prevent function execution
+  // if critical environment variables are missing.
+}
+
+
+// Validation schema for incoming query parameters
 const checkStatusSchema = z.object({
   orderRef: z.string().min(1),
   txId: z.string().min(1)
-})
+});
 
 function calculateStudentBalance(terms) {
-  return Object.values(terms).reduce((total, term) => total + (term.fee - term.paid), 0)
+  // Ensure terms is an object before iterating
+  if (!terms || typeof terms !== 'object') {
+    return 0;
+  }
+  return Object.values(terms).reduce((total, term) => total + ((term.fee || 0) - (term.paid || 0)), 0);
 }
 
 exports.handler = async (event, context) => {
@@ -46,7 +63,7 @@ exports.handler = async (event, context) => {
         'Access-Control-Allow-Methods': 'GET, OPTIONS'
       },
       body: JSON.stringify({ error: 'Method not allowed' })
-    }
+    };
   }
 
   // Handle CORS preflight
@@ -59,32 +76,30 @@ exports.handler = async (event, context) => {
         'Access-Control-Allow-Methods': 'GET, OPTIONS'
       },
       body: ''
-    }
+    };
   }
 
   try {
     // Parse query parameters
-    const { orderRef, txId } = event.queryStringParameters || {}
-    
-    if (!orderRef || !txId) {
-      throw new Error('Missing required parameters: orderRef and txId')
-    }
+    const { orderRef, txId } = event.queryStringParameters || {};
 
-    const validatedData = checkStatusSchema.parse({ orderRef, txId })
-    console.log('Checking payment status for:', validatedData)
+    // Validate parameters using Zod
+    const validatedData = checkStatusSchema.parse({ orderRef, txId });
+    console.log('Checking payment status for:', validatedData);
 
     // Get transaction from database
-    const transactionSnapshot = await get(ref(db, `transactions/${validatedData.txId}`))
+    // Corrected: Use db.ref().once('value')
+    const transactionSnapshot = await db.ref(`transactions/${validatedData.txId}`).once('value');
     if (!transactionSnapshot.exists()) {
-      throw new Error('Transaction not found')
+      throw new Error('Transaction not found in database for provided txId');
     }
 
-    const transaction = transactionSnapshot.val()
-    console.log('Found transaction:', transaction.id, 'Status:', transaction.status)
+    const transaction = transactionSnapshot.val();
+    console.log('Found transaction:', transaction.id, 'Status:', transaction.status);
 
-    // If already processed, return current status
+    // If already processed, return current status without calling ZbPay API again
     if (transaction.status === 'zb_payment_successful' || transaction.status === 'zb_payment_failed') {
-      console.log('Transaction already processed, returning current status')
+      console.log('Transaction already processed, returning current status without re-checking ZbPay.');
       return {
         statusCode: 200,
         headers: {
@@ -97,115 +112,150 @@ exports.handler = async (event, context) => {
           status: transaction.status,
           orderReference: transaction.orderReference,
           transactionId: transaction.id,
-          amount: transaction.amount
+          amount: transaction.amount,
+          zbPayStatus: transaction.zbPayStatusCheck?.status || 'N/A' // Return last known ZbPay status if available
         })
-      }
+      };
     }
 
     // Check status with ZbPay API
-    console.log('Checking with ZbPay API...')
+    console.log('Checking with ZbPay API...');
     const zbPayResponse = await fetch(
       `${ZBPAY_BASE_URL}/payments/transaction/${validatedData.orderRef}/status/check`,
       {
         method: 'GET',
         headers: {
           'x-api-key': ZBPAY_API_KEY,
-          'x-api-secret': ZBPAY_API_SECRET
+          'x-api-secret': ZBPAY_API_SECRET,
+          'Content-Type': 'application/json' // Often good practice to include
         }
       }
-    )
+    );
 
-    console.log('ZbPay status check response:', zbPayResponse.status)
-    const zbPayData = await zbPayResponse.json()
-    console.log('ZbPay status data:', zbPayData)
+    console.log('ZbPay status check response status:', zbPayResponse.status);
+    const zbPayData = await zbPayResponse.json();
+    console.log('ZbPay status data:', zbPayData);
 
     if (!zbPayResponse.ok) {
-      throw new Error(`ZbPay API error: ${zbPayData.message || 'Unknown error'}`)
+      // Log the full error response from ZbPay if available
+      console.error('ZbPay API call failed:', zbPayData);
+      throw new Error(`ZbPay API error: ${zbPayData.message || zbPayData.error || 'Unknown error'}`);
     }
 
-    const updates = {}
-    let newStatus = transaction.status
-    let shouldUpdateStudent = false
+    const updates = {};
+    let newStatus = transaction.status; // Default to current status
+    let notificationTitle = 'Payment Status Update';
+    let notificationMessage = 'Your ZbPay payment status has been updated.';
+    let notificationType = 'info';
 
     // Process ZbPay status
     if (zbPayData.status === 'PAID' || zbPayData.status === 'SUCCESSFUL') {
       if (transaction.status === 'pending_zb_confirmation') {
-        console.log('Payment successful, updating student financials')
+        console.log('Payment successful, updating student financials');
         // Payment successful - update student financials
-        const studentSnapshot = await get(ref(db, `students/${transaction.studentId}`))
+        // Corrected: Use db.ref().once('value')
+        const studentSnapshot = await db.ref(`students/${transaction.studentId}`).once('value');
         if (studentSnapshot.exists()) {
-          const student = studentSnapshot.val()
-          const updatedTerms = { ...student.financials.terms }
-          
+          const student = studentSnapshot.val();
+          const updatedTerms = { ...(student.financials?.terms || {}) };
+
           if (updatedTerms[transaction.termKey]) {
-            updatedTerms[transaction.termKey].paid += transaction.amount
-            const newBalance = calculateStudentBalance(updatedTerms)
+            // Ensure 'paid' property exists and is a number before adding
+            updatedTerms[transaction.termKey].paid = (updatedTerms[transaction.termKey].paid || 0) + transaction.amount;
+            const newBalance = calculateStudentBalance(updatedTerms);
 
-            // Update student financials
-            updates[`students/${transaction.studentId}/financials/terms/${transaction.termKey}/paid`] = 
-              updatedTerms[transaction.termKey].paid
-            updates[`students/${transaction.studentId}/financials/balance`] = newBalance
-            updates[`students/${transaction.studentId}/updatedAt`] = new Date().toISOString()
+            // Update student financials paths
+            updates[`students/${transaction.studentId}/financials/terms/${transaction.termKey}/paid`] =
+              updatedTerms[transaction.termKey].paid;
+            updates[`students/${transaction.studentId}/financials/balance`] = newBalance;
+            updates[`students/${transaction.studentId}/updatedAt`] = new Date().toISOString();
 
-            shouldUpdateStudent = true
-            newStatus = 'zb_payment_successful'
+            newStatus = 'zb_payment_successful';
+            notificationTitle = 'Payment Successful';
+            notificationMessage = `ZbPay payment of $${transaction.amount.toFixed(2)} completed successfully.`;
+            notificationType = 'success';
 
             // Create notifications
-            const studentNotificationId = `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-            const adminNotificationId = `notif-${Date.now() + 1}-${Math.random().toString(36).substr(2, 9)}`
+            const studentNotificationId = `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const adminNotificationId = `notif-${Date.now() + 1}-${Math.random().toString(36).substr(2, 9)}`;
 
             updates[`notifications/${studentNotificationId}`] = {
               id: studentNotificationId,
               userId: transaction.studentId,
               userRole: 'student',
-              title: 'Payment Successful',
-              message: `ZbPay payment of $${transaction.amount.toFixed(2)} completed successfully.`,
-              type: 'success',
+              title: notificationTitle,
+              message: notificationMessage,
+              type: notificationType,
               read: false,
               createdAt: new Date().toISOString()
-            }
+            };
 
             updates[`notifications/${adminNotificationId}`] = {
               id: adminNotificationId,
-              userId: 'admin-001',
+              userId: 'admin-001', // Default admin ID
               userRole: 'admin',
               title: 'ZbPay Payment Successful',
               message: `ZbPay payment of $${transaction.amount.toFixed(2)} for ${student.name} ${student.surname} completed. Ref: ${validatedData.orderRef}`,
               type: 'success',
               read: false,
               createdAt: new Date().toISOString()
-            }
+            };
+          } else {
+            console.warn(`Term key '${transaction.termKey}' not found for student ${transaction.studentId}. Student financials not updated.`);
+            newStatus = 'zb_payment_successful_term_issue'; // Custom status for successful payment but term issue
+            notificationTitle = 'Payment Processed (Term Issue)';
+            notificationMessage = `ZbPay payment of $${transaction.amount.toFixed(2)} completed, but term '${transaction.termKey}' not found.`;
+            notificationType = 'warning';
           }
+        } else {
+          console.warn(`Student ${transaction.studentId} not found for transaction ${transaction.id}. Student financials not updated.`);
+          newStatus = 'zb_payment_successful_student_missing'; // Custom status for successful payment but student missing
+          notificationTitle = 'Payment Processed (Student Missing)';
+          notificationMessage = `ZbPay payment of $${transaction.amount.toFixed(2)} completed, but student record not found.`;
+          notificationType = 'warning';
         }
+      } else {
+        console.log(`ZbPay reported successful, but transaction status in DB is not 'pending_zb_confirmation'. No student update.`);
+        newStatus = 'zb_payment_successful'; // Ensure status is marked successful
       }
     } else if (zbPayData.status === 'FAILED' || zbPayData.status === 'CANCELED') {
-      console.log('Payment failed or canceled')
-      newStatus = 'zb_payment_failed'
+      console.log('Payment failed or canceled by ZbPay.');
+      newStatus = 'zb_payment_failed';
+      notificationTitle = 'Payment Failed';
+      notificationMessage = `Your ZbPay payment for $${transaction.amount.toFixed(2)} failed. Please try again.`;
+      notificationType = 'error';
 
       // Create failure notification
-      const studentNotificationId = `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      const studentNotificationId = `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       updates[`notifications/${studentNotificationId}`] = {
         id: studentNotificationId,
         userId: transaction.studentId,
         userRole: 'student',
-        title: 'Payment Failed',
-        message: `Your ZbPay payment failed. Please try again.`,
-        type: 'error',
+        title: notificationTitle,
+        message: notificationMessage,
+        type: notificationType,
         read: false,
         createdAt: new Date().toISOString()
-      }
+      };
+    } else {
+      // Payment is still pending or in an unknown state
+      console.log(`ZbPay status is '${zbPayData.status}'. Keeping transaction status as is.`);
+      // No change to newStatus, notification, or student financials if still pending
     }
 
-    // Update transaction status
-    updates[`transactions/${transaction.id}/status`] = newStatus
-    updates[`transactions/${transaction.id}/zbPayStatusCheck`] = zbPayData
-    updates[`transactions/${transaction.id}/updatedAt`] = new Date().toISOString()
+    // Update transaction status and store ZbPay response
+    updates[`transactions/${transaction.id}/status`] = newStatus;
+    updates[`transactions/${transaction.id}/zbPayStatusCheck`] = zbPayData; // Store the full ZbPay response
+    updates[`transactions/${transaction.id}/updatedAt`] = new Date().toISOString();
 
     // Execute atomic update if there are changes
     if (Object.keys(updates).length > 0) {
-      console.log('Executing database updates...')
-      await update(ref(db), updates)
-      console.log('Database updated successfully')
+      console.log('Executing database updates...');
+      // Corrected: Use db.ref('/').update(updates)
+      await db.ref('/').update(updates);
+      console.log('Database updated successfully');
+    } else {
+      console.log('No database updates needed for this status check.');
     }
 
     return {
@@ -217,17 +267,17 @@ exports.handler = async (event, context) => {
       },
       body: JSON.stringify({
         success: true,
-        status: newStatus,
+        status: newStatus, // Return the new or current status
         orderReference: transaction.orderReference,
         transactionId: transaction.id,
         amount: transaction.amount,
-        zbPayStatus: zbPayData.status
+        zbPayStatus: zbPayData.status // Return the actual status from ZbPay
       })
-    }
+    };
 
   } catch (error) {
-    console.error('Error checking ZbPay status:', error)
-    
+    console.error('Error checking ZbPay status:', error);
+
     return {
       statusCode: 400,
       headers: {
@@ -239,6 +289,6 @@ exports.handler = async (event, context) => {
         success: false,
         error: error.message || 'Failed to check payment status'
       })
-    }
+    };
   }
-}
+};

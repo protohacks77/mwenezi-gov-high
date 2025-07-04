@@ -1,23 +1,26 @@
-const { getDatabase, ref, get, update } = require('firebase-admin/database')
-const { initializeApp, cert } = require('firebase-admin/app')
-const { z } = require('zod')
+const admin = require('firebase-admin'); // Import the main firebase-admin module
+const { z } = require('zod'); // Keep Zod if it's used for schema validation
 
 // Initialize Firebase Admin
-let app
+let app;
 try {
-  app = require('firebase-admin').app()
+  // Check if an app instance already exists to avoid re-initialization in hot-reloading environments
+  app = admin.app();
 } catch (e) {
-  app = initializeApp({
-    credential: cert({
+  // If no app exists, initialize a new one
+  app = admin.initializeApp({
+    credential: admin.credential.cert({ // Use admin.credential.cert
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      // The replace is crucial if the private key environment variable escapes newlines
       privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
     }),
-    databaseURL: process.env.FIREBASE_DATABASE_URL
-  })
+    databaseURL: process.env.FIREBASE_DATABASE_URL // Ensure this environment variable is set
+  });
 }
 
-const db = getDatabase(app)
+// Get the Realtime Database service instance
+const db = admin.database(app);
 
 // Validation schema
 const cashPaymentSchema = z.object({
@@ -26,16 +29,20 @@ const cashPaymentSchema = z.object({
   termKey: z.string().min(1),
   bursarId: z.string().min(1),
   bursarUsername: z.string().min(1)
-})
+});
 
 function generateReceiptNumber() {
-  const timestamp = Date.now().toString().slice(-8)
-  const random = Math.floor(Math.random() * 99).toString().padStart(2, '0')
-  return `RCT-${timestamp}${random}`
+  const timestamp = Date.now().toString().slice(-8);
+  const random = Math.floor(Math.random() * 99).toString().padStart(2, '0');
+  return `RCT-${timestamp}${random}`;
 }
 
 function calculateStudentBalance(terms) {
-  return Object.values(terms).reduce((total, term) => total + (term.fee - term.paid), 0)
+  // Ensure terms is an object before iterating
+  if (!terms || typeof terms !== 'object') {
+    return 0;
+  }
+  return Object.values(terms).reduce((total, term) => total + (term.fee - term.paid), 0);
 }
 
 exports.handler = async (event, context) => {
@@ -49,7 +56,7 @@ exports.handler = async (event, context) => {
         'Access-Control-Allow-Methods': 'POST, OPTIONS'
       },
       body: JSON.stringify({ error: 'Method not allowed' })
-    }
+    };
   }
 
   // Handle CORS preflight
@@ -62,46 +69,49 @@ exports.handler = async (event, context) => {
         'Access-Control-Allow-Methods': 'POST, OPTIONS'
       },
       body: ''
-    }
+    };
   }
 
   try {
     // Parse and validate input
-    const body = JSON.parse(event.body)
-    const validatedData = cashPaymentSchema.parse(body)
+    const body = JSON.parse(event.body);
+    const validatedData = cashPaymentSchema.parse(body);
 
     // Get student data
-    const studentSnapshot = await get(ref(db, `students/${validatedData.studentId}`))
+    // Corrected: Use db.ref().once('value')
+    const studentSnapshot = await db.ref(`students/${validatedData.studentId}`).once('value');
     if (!studentSnapshot.exists()) {
-      throw new Error('Student not found')
+      throw new Error('Student not found');
     }
 
-    const student = studentSnapshot.val()
-    const receiptNumber = generateReceiptNumber()
-    const transactionId = `txn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    const bursarActivityId = `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    const studentNotificationId = `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    const adminNotificationId = `notif-${Date.now() + 1}-${Math.random().toString(36).substr(2, 9)}`
+    const student = studentSnapshot.val();
+    const receiptNumber = generateReceiptNumber();
+    const transactionId = `txn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const bursarActivityId = `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const studentNotificationId = `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const adminNotificationId = `notif-${Date.now() + 1}-${Math.random().toString(36).substr(2, 9)}`;
 
     // Update student's payment for the specific term
-    const updatedTerms = { ...student.financials.terms }
+    const updatedTerms = { ...(student.financials?.terms || {}) }; // Ensure financials.terms exists
     if (!updatedTerms[validatedData.termKey]) {
-      throw new Error('Invalid term key')
+      throw new Error('Invalid term key');
     }
 
-    updatedTerms[validatedData.termKey].paid += validatedData.amount
+    // Ensure 'paid' property exists and is a number before adding
+    updatedTerms[validatedData.termKey].paid = (updatedTerms[validatedData.termKey].paid || 0) + validatedData.amount;
 
     // Recalculate balance
-    const newBalance = calculateStudentBalance(updatedTerms)
+    const newBalance = calculateStudentBalance(updatedTerms);
 
     // Prepare atomic updates
-    const updates = {}
+    const updates = {};
 
-    // Update student financials
-    updates[`students/${validatedData.studentId}/financials/terms/${validatedData.termKey}/paid`] = 
-      updatedTerms[validatedData.termKey].paid
-    updates[`students/${validatedData.studentId}/financials/balance`] = newBalance
-    updates[`students/${validatedData.studentId}/updatedAt`] = new Date().toISOString()
+    // Update student financials paths
+    // Update the specific 'paid' field within the term
+    updates[`students/${validatedData.studentId}/financials/terms/${validatedData.termKey}/paid`] =
+      updatedTerms[validatedData.termKey].paid;
+    updates[`students/${validatedData.studentId}/financials/balance`] = newBalance;
+    updates[`students/${validatedData.studentId}/updatedAt`] = new Date().toISOString();
 
     // Create transaction record
     updates[`transactions/${transactionId}`] = {
@@ -117,7 +127,7 @@ exports.handler = async (event, context) => {
       bursarUsername: validatedData.bursarUsername,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
-    }
+    };
 
     // Create bursar activity record
     updates[`bursar_activity/${bursarActivityId}`] = {
@@ -130,7 +140,7 @@ exports.handler = async (event, context) => {
       termKey: validatedData.termKey,
       receiptNumber: receiptNumber,
       createdAt: new Date().toISOString()
-    }
+    };
 
     // Create notifications
     updates[`notifications/${studentNotificationId}`] = {
@@ -142,7 +152,7 @@ exports.handler = async (event, context) => {
       type: 'success',
       read: false,
       createdAt: new Date().toISOString()
-    }
+    };
 
     updates[`notifications/${adminNotificationId}`] = {
       id: adminNotificationId,
@@ -153,10 +163,11 @@ exports.handler = async (event, context) => {
       type: 'info',
       read: false,
       createdAt: new Date().toISOString()
-    }
+    };
 
     // Execute atomic update
-    await update(ref(db), updates)
+    // Corrected: Use db.ref('/').update(updates)
+    await db.ref('/').update(updates);
 
     return {
       statusCode: 200,
@@ -171,11 +182,11 @@ exports.handler = async (event, context) => {
         newBalance: newBalance,
         transactionId: transactionId
       })
-    }
+    };
 
   } catch (error) {
-    console.error('Error processing cash payment:', error)
-    
+    console.error('Error processing cash payment:', error);
+
     return {
       statusCode: 400,
       headers: {
@@ -187,6 +198,6 @@ exports.handler = async (event, context) => {
         success: false,
         error: error.message || 'Failed to process payment'
       })
-    }
+    };
   }
-}
+};
