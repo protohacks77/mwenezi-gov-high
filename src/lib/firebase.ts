@@ -3,14 +3,14 @@ import { getDatabase, ref, set, get, push, update, onValue, off } from 'firebase
 import type { Student, User, Transaction, SchoolConfig, BursarActivity, FeeAdjustment, Notification } from '@/types'
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBUFe6bLBJL8J8_h9x8EjwQ9KJ2YvqQ6-Y",
-  authDomain: "mwenezi-fees-management.firebaseapp.com",
-  databaseURL: "https://mwenezi-fees-management-default-rtdb.firebaseio.com",
-  projectId: "mwenezi-fees-management",
-  storageBucket: "mwenezi-fees-management.appspot.com",
-  messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:1234567890abcdef"
-}
+  apiKey: "AIzaSyDW_D4-2Tw6TTDhI7WyTtwVCZWn_i52ECY",
+  authDomain: "mwenezihigh.firebaseapp.com",
+  databaseURL: "https://mwenezihigh-default-rtdb.firebaseio.com",
+  projectId: "mwenezihigh",
+  storageBucket: "mwenezihigh.firebasestorage.app",
+  messagingSenderId: "588608479487",
+  appId: "1:588608479487:web:6e5c057d0978769862acca"
+};
 
 const app = initializeApp(firebaseConfig)
 export const database = getDatabase(app)
