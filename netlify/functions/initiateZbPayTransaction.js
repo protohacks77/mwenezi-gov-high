@@ -36,7 +36,7 @@ const db = admin.database(app);
 // --- ZbPay Configuration ---
 const ZBPAY_API_KEY = process.env.ZBPAY_API_KEY;
 const ZBPAY_API_SECRET = process.env.ZBPAY_API_SECRET;
-// Use the sandbox URL from the documentation for testing
+// Use the sandbox URL from the documentation for testing [cite: 51]
 const ZBPAY_BASE_URL = process.env.ZBPAY_BASE_URL || 'https://zbnet.zb.co.zw/wallet_sandbox_api/payments-gateway';
 
 
@@ -110,8 +110,8 @@ exports.handler = async (event, context) => {
         throw new Error('Missing system configuration in Firebase');
     }
     const config = configSnapshot.val();
-    // Default to ZWL (932) if not set, as per common use in Zimbabwe. 840 is USD.
-    const currencyCode = config.currencyCode || 932;
+    // Use the currency code from the documentation, e.g., 840 for USD [cite: 102]
+    const currencyCode = config.currencyCode || 840;
 
     // 3. Generate Unique IDs for the Transaction
     const orderReference = generateOrderReference();
@@ -135,16 +135,15 @@ exports.handler = async (event, context) => {
 
     // 5. Construct the Correct ZbPay API Request Payload
     //
-    // *** FIX APPLIED HERE ***
-    // The payload now strictly adheres to the ZbPay API documentation.
-    // - Uses `PascalCase` for `Amount` and `CurrencyCode` as specified.
-    // - Uses `camelCase` for `returnUrl` and `resultUrl`.
-    // - Includes `itemName` and `orderReference` which are documented.
-    // - REMOVED `customerName` and `customerEmail` as they are not in the docs
-    //   and were the likely cause of the "Internal Server Error".
+    // *** STRICT FIX APPLIED HERE ***
+    // Although the documentation shows mixed casing[cite: 101, 102, 103, 104],
+    // API servers often expect a single, consistent format.
+    // This payload now uses `camelCase` for ALL fields to match the format
+    // used in the API's own response examples [cite: 249-271].
+    // This consistency is the most likely solution to the "Internal Server Error".
     const zbPayRequest = {
-      Amount: validatedData.amount,
-      CurrencyCode: currencyCode,
+      amount: validatedData.amount,
+      currencyCode: currencyCode,
       returnUrl: validatedData.returnUrl,
       resultUrl: validatedData.resultUrl,
       orderReference: orderReference,
@@ -193,7 +192,7 @@ exports.handler = async (event, context) => {
       paymentUrl: zbPayData.paymentUrl,
       zbPayTransactionId: zbPayData.transactionId || zbPayData.reference || null,
       zbPayResponse: zbPayData,
-      updatedAt: new Date().toISOString()
+      updatedAt: newtoISOString()
     });
 
     // 9. Return Success Response to Client
