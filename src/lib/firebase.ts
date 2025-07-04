@@ -10,7 +10,7 @@ const firebaseConfig = {
   storageBucket: "mwenezihigh.firebasestorage.app",
   messagingSenderId: "588608479487",
   appId: "1:588608479487:web:6e5c057d0978769862acca"
-};
+}
 
 const app = initializeApp(firebaseConfig)
 export const database = getDatabase(app)
@@ -120,8 +120,8 @@ export const seedInitialData = async (): Promise<void> => {
         currencyCode: 840,
         zbPayConfig: {
           baseUrl: 'https://zbnet.zb.co.zw/wallet_sandbox_api/payments-gateway',
-          returnUrl: 'https://mghpayfees.netlify.app/#/student/payment-status',
-          resultUrl: 'https://mghpayfees.netlify.app/.netlify/functions/zbPayWebhookHandler'
+          returnUrl: 'https://mwenezipayfees.netlify.app/#/student/payment-status',
+          resultUrl: 'https://mwenezipayfees.netlify.app/.netlify/functions/zbPayWebhookHandler'
         }
       },
       users: {

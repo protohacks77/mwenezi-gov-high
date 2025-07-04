@@ -29,7 +29,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   useEffect(() => {
-    // Initialize app immediately without blocking UI
+    // Initialize app
     const initializeApp = async () => {
       try {
         console.log('🚀 Initializing application...')
@@ -40,13 +40,11 @@ function App() {
         // Initialize database in background (non-blocking)
         seedInitialData().catch(error => {
           console.error('⚠️ Background database initialization error:', error)
-          // Don't block the app if seeding fails
         })
         
         console.log('✅ App initialization complete')
       } catch (error) {
         console.error('💥 App initialization error:', error)
-        // Don't block the app even if initialization fails
       }
     }
 
@@ -115,7 +113,7 @@ function App() {
           {/* Admin routes */}
           {user?.role === 'admin' && (
             <>
-              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/dashboard" element={<AdminDashboard onSettingsClick={() => setSettingsOpen(true)} />} />
               <Route path="/admin/students" element={<AdminStudents />} />
               <Route path="/admin/financial-activity" element={<AdminFinancialActivity />} />
               <Route path="/admin/config" element={<AdminConfig />} />
