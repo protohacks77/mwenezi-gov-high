@@ -28,10 +28,11 @@ const db = admin.database(app);
 // Ensure these are always pulled from environment variables.
 const ZBPAY_API_KEY = process.env.ZBPAY_API_KEY;
 const ZBPAY_API_SECRET = process.env.ZBPAY_API_SECRET;
-// Note: Double-check this base URL against the ZbPay documentation for exact match.
-// The documentation sometimes shows slight variations (e.g., 'payment' vs 'payments-gateway').
-// Ensure it matches what ZbPay expects for 'initiate-transaction'.
-const ZBPAY_BASE_URL = process.env.ZBPAY_BASE_URL || 'https://zbnet.zb.co.zw/wallet_sandbox-api/payments-gateway';
+// CRITICAL: Ensure this base URL exactly matches what ZbPay expects.
+// Based on the documentation, 'wallet_sandbox_api' (with underscore) appears to be the correct format,
+// despite a possible typo with a space in some parts of their document.
+// If you continue to get "Internal Server Error", confirm this exact URL with ZbPay support.
+const ZBPAY_BASE_URL = process.env.ZBPAY_BASE_URL || 'https://zbnet.zb.co.zw/wallet_sandbox_api/payments-gateway';
 
 // Validate that API keys are present
 if (!ZBPAY_API_KEY || !ZBPAY_API_SECRET) {
@@ -133,7 +134,7 @@ exports.handler = async (event, context) => {
 
     // Prepare ZbPay request payload based on their documentation (Standard Checkout)
     // Removed 'transactionId', 'studentId', 'termKey' from this payload as they are not
-    // explicitly listed as request parameters for 'initiate-transaction' in the provided docs.
+    // explicitly listed as request parameters for 'initiate-transaction' in the provided docs for standard checkout.
     const zbPayRequest = {
       Amount: validatedData.amount,
       CurrencyCode: currencyCode,
@@ -142,7 +143,7 @@ exports.handler = async (event, context) => {
       orderReference: orderReference, // This is explicitly required by ZbPay
     };
 
-    console.log('📡 ZbPay request payload being sent:', zbPayRequest);
+    console.log('📡 ZbPay request payload being sent:', JSON.stringify(zbPayRequest, null, 2)); // Log for debugging
 
     // Make request to ZbPay API
     const zbPayResponse = await fetch(`${ZBPAY_BASE_URL}/payments/initiate-transaction`, {
@@ -175,7 +176,7 @@ exports.handler = async (event, context) => {
     await db.ref(`transactions/${transactionId}`).update({
       paymentUrl: zbPayData.paymentUrl, // Store the payment URL provided by ZbPay
       zbPayResponse: zbPayData, // Store the full successful response
-      // If ZbPay returns its own transaction ID, store it here
+      // If ZbPay returns its own transaction ID, store it here (e.g., zbPayData.transactionId)
       zbPayTransactionId: zbPayData.transactionId || zbPayData.reference || null,
       updatedAt: new Date().toISOString()
     });
