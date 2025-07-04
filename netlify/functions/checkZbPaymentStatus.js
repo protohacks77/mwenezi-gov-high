@@ -28,7 +28,7 @@ const db = admin.database(app);
 // Ensure these are always pulled from environment variables.
 const ZBPAY_API_KEY = process.env.ZBPAY_API_KEY;
 const ZBPAY_API_SECRET = process.env.ZBPAY_API_SECRET;
-const ZBPAY_BASE_URL = process.env.ZBPAY_BASE_URL || 'https://zbnet.zb.co.zw/wallet_sandbox_api/payments-gateway';
+const ZBPAY_BASE_URL = process.env.ZBPAY_BASE_URL || 'https://zbnet.zb.co.zw/wallet_sandbox-api/payments-gateway';
 
 // Validate that API keys are present
 if (!ZBPAY_API_KEY || !ZBPAY_API_SECRET) {

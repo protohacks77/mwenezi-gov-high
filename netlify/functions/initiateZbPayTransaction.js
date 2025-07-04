@@ -31,7 +31,7 @@ const ZBPAY_API_SECRET = process.env.ZBPAY_API_SECRET;
 // Note: Double-check this base URL against the ZbPay documentation for exact match.
 // The documentation sometimes shows slight variations (e.g., 'payment' vs 'payments-gateway').
 // Ensure it matches what ZbPay expects for 'initiate-transaction'.
-const ZBPAY_BASE_URL = process.env.ZBPAY_BASE_URL || 'https://zbnet.zb.co.zw/wallet_sandbox_api/payments-gateway';
+const ZBPAY_BASE_URL = process.env.ZBPAY_BASE_URL || 'https://zbnet.zb.co.zw/wallet_sandbox-api/payments-gateway';
 
 // Validate that API keys are present
 if (!ZBPAY_API_KEY || !ZBPAY_API_SECRET) {
