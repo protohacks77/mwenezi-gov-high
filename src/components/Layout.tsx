@@ -2,6 +2,7 @@ import React, { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { Sidebar } from './Sidebar'
 import { MobileNav } from './MobileNav'
+import { MobileBottomNav } from './MobileBottomNav'
 import { useAuthStore } from '@/store/authStore'
 
 interface LayoutProps {
@@ -33,7 +34,7 @@ export function Layout({ children, onSettingsClick }: LayoutProps) {
 
       {/* Main Content */}
       <div className="lg:ml-64">
-        <main className="min-h-screen">
+        <main className="min-h-screen pb-20 lg:pb-0">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -43,6 +44,11 @@ export function Layout({ children, onSettingsClick }: LayoutProps) {
             {children}
           </motion.div>
         </main>
+      </div>
+
+      {/* Mobile Bottom Navigation */}
+      <div className="lg:hidden">
+        <MobileBottomNav />
       </div>
     </div>
   )

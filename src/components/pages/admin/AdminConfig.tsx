@@ -7,7 +7,9 @@ import {
   Save,
   Plus,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  CheckCircle,
+  Play
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -15,13 +17,19 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { useDataStore } from '@/store/dataStore'
+import { useAuthStore } from '@/store/authStore'
 import { formatCurrency } from '@/lib/utils'
 import toast from 'react-hot-toast'
 
 export function AdminConfig() {
   const { config } = useDataStore()
+  const { user } = useAuthStore()
   const [isLoading, setIsLoading] = useState(false)
   const [newTerm, setNewTerm] = useState('')
+  const [availableTerms, setAvailableTerms] = useState([
+    '2025_Term1', '2025_Term2', '2025_Term3',
+    '2026_Term1', '2026_Term2', '2026_Term3'
+  ])
   
   const [fees, setFees] = useState(config?.fees || {
     dayScholar: {
@@ -52,11 +60,30 @@ export function AdminConfig() {
   }
 
   const saveFeeStructure = async () => {
+    if (!user) return
+    
     setIsLoading(true)
     try {
-      // In a real app, this would call a Netlify function to update fees
-      toast.success('Fee structure updated successfully!')
+      const response = await fetch('/.netlify/functions/updateFeeStructure', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fees: fees,
+          adminId: user.id
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast.success('Fee structure updated successfully! All student balances have been recalculated.')
+      } else {
+        toast.error(result.error || 'Failed to update fee structure')
+      }
     } catch (error) {
+      console.error('Fee update error:', error)
       toast.error('Failed to update fee structure')
     } finally {
       setIsLoading(false)
@@ -69,13 +96,64 @@ export function AdminConfig() {
       return
     }
 
+    if (!user) return
+
     setIsLoading(true)
     try {
-      // In a real app, this would call a Netlify function to add a new term
-      toast.success(`Term "${newTerm}" added successfully!`)
-      setNewTerm('')
+      const response = await fetch('/.netlify/functions/addNewTerm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          termKey: newTerm.trim(),
+          adminId: user.id
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast.success(`Term "${newTerm}" added successfully! All students have been billed.`)
+        setNewTerm('')
+        setAvailableTerms(prev => prev.filter(t => t !== newTerm.trim()))
+      } else {
+        toast.error(result.error || 'Failed to add new term')
+      }
     } catch (error) {
+      console.error('Add term error:', error)
       toast.error('Failed to add new term')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const activateTerm = async (termKey: string) => {
+    if (!user) return
+
+    setIsLoading(true)
+    try {
+      const response = await fetch('/.netlify/functions/activateTerm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          termKey: termKey,
+          adminId: user.id
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast.success(`Term "${termKey}" activated successfully!`)
+      } else {
+        toast.error(result.error || 'Failed to activate term')
+      }
+    } catch (error) {
+      console.error('Activate term error:', error)
+      toast.error('Failed to activate term')
     } finally {
       setIsLoading(false)
     }
@@ -87,16 +165,39 @@ export function AdminConfig() {
       return
     }
 
+    if (!user) return
+
     setIsLoading(true)
     try {
-      // In a real app, this would call a Netlify function to remove the term
-      toast.success(`Term "${termKey}" removed successfully!`)
+      const response = await fetch('/.netlify/functions/removeTerm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          termKey: termKey,
+          adminId: user.id
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast.success(`Term "${termKey}" removed successfully!`)
+      } else {
+        toast.error(result.error || 'Failed to remove term')
+      }
     } catch (error) {
+      console.error('Remove term error:', error)
       toast.error('Failed to remove term')
     } finally {
       setIsLoading(false)
     }
   }
+
+  const inactiveTerms = availableTerms.filter(term => 
+    !config?.activeTerms.includes(term)
+  )
 
   return (
     <div className="space-y-6">
@@ -233,12 +334,12 @@ export function AdminConfig() {
             {isLoading ? (
               <div className="flex items-center">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                Saving...
+                Updating...
               </div>
             ) : (
               <div className="flex items-center">
                 <Save className="w-4 h-4 mr-2" />
-                Save Fee Structure
+                Update Fee Structure
               </div>
             )}
           </Button>
@@ -263,7 +364,8 @@ export function AdminConfig() {
             <div className="flex flex-wrap gap-2">
               {config?.activeTerms.map((term) => (
                 <div key={term} className="flex items-center space-x-2">
-                  <Badge variant="outline" className="border-amber-500 text-amber-400">
+                  <Badge variant="outline" className="border-green-500 text-green-400">
+                    <CheckCircle className="w-3 h-3 mr-1" />
                     {term.replace('_', ' ')}
                   </Badge>
                   <Button
@@ -271,6 +373,7 @@ export function AdminConfig() {
                     size="icon"
                     onClick={() => removeTerm(term)}
                     className="h-6 w-6 text-red-400 hover:text-red-300"
+                    disabled={isLoading}
                   >
                     <Trash2 className="w-3 h-3" />
                   </Button>
@@ -278,6 +381,31 @@ export function AdminConfig() {
               ))}
             </div>
           </div>
+
+          {/* Available Terms to Activate */}
+          {inactiveTerms.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold text-white mb-3">Available Terms</h3>
+              <div className="flex flex-wrap gap-2">
+                {inactiveTerms.map((term) => (
+                  <div key={term} className="flex items-center space-x-2">
+                    <Badge variant="outline" className="border-slate-500 text-slate-400">
+                      {term.replace('_', ' ')}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => activateTerm(term)}
+                      className="h-6 w-6 text-green-400 hover:text-green-300"
+                      disabled={isLoading}
+                    >
+                      <Play className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Add New Term */}
           <div>
@@ -310,8 +438,8 @@ export function AdminConfig() {
               <div>
                 <h4 className="text-amber-400 font-medium">Important Notice</h4>
                 <p className="text-amber-300 text-sm mt-1">
-                  When you add a new term, all existing students will be automatically billed 
-                  according to their student type and grade category. This action cannot be undone.
+                  When you update fees or add new terms, all student balances will be automatically 
+                  recalculated. This action cannot be undone.
                 </p>
               </div>
             </div>

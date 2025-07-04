@@ -77,9 +77,6 @@ export function LoginForm() {
               <CardDescription className="text-slate-400 mt-2">
                 Fees Management System
               </CardDescription>
-              <p className="text-xs text-amber-primary mt-1 font-medium">
-                "Relevant Education for Livelihood"
-              </p>
             </div>
           </CardHeader>
           <CardContent>
@@ -159,17 +156,14 @@ export function LoginForm() {
                 )}
               </Button>
             </form>
-
-            {/* Demo Credentials */}
-            <div className="mt-6 p-4 bg-slate-primary rounded-lg border border-slate-600">
-              <h4 className="text-sm font-medium text-white mb-2">Demo Credentials:</h4>
-              <div className="space-y-1 text-xs text-slate-400">
-                <p><span className="text-amber-primary">Admin:</span> admin / admin123</p>
-                <p><span className="text-amber-primary">Bursar:</span> bursar / bursar123</p>
-                <p><span className="text-amber-primary">Student:</span> MHS-001 / student123</p>
-              </div>
-            </div>
           </CardContent>
+          
+          {/* Footer with slogan */}
+          <div className="px-6 pb-6">
+            <p className="text-xs text-amber-primary text-center font-medium">
+              "Relevant Education for Livelihood"
+            </p>
+          </div>
         </Card>
       </motion.div>
     </div>

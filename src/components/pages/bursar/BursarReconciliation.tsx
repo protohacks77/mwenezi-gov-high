@@ -16,11 +16,13 @@ import { Label } from '@/components/ui/label'
 import { useDataStore } from '@/store/dataStore'
 import { useAuthStore } from '@/store/authStore'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import toast from 'react-hot-toast'
 
 export function BursarReconciliation() {
   const { transactions } = useDataStore()
   const { user } = useAuthStore()
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false)
 
   // Filter transactions for the selected date and current bursar
   const dailyTransactions = Object.values(transactions).filter(transaction => {
@@ -45,20 +47,50 @@ export function BursarReconciliation() {
   const totalDailyCash = allCashTransactions.reduce((sum, t) => sum + t.amount, 0)
   const totalDailyTransactions = allCashTransactions.length
 
-  const generateReport = () => {
-    const reportData = {
-      date: selectedDate,
-      bursar: user?.username,
-      transactions: dailyTransactions,
-      summary: {
-        totalAmount: totalCashCollected,
-        transactionCount: transactionCount
+  const generateReport = async () => {
+    if (!user) return
+
+    setIsGeneratingReport(true)
+    try {
+      const response = await fetch('/.netlify/functions/generateBursarReport', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          date: selectedDate,
+          bursarId: user.id,
+          bursarUsername: user.username,
+          transactions: dailyTransactions,
+          summary: {
+            totalAmount: totalCashCollected,
+            transactionCount: transactionCount
+          }
+        })
+      })
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.style.display = 'none'
+        a.href = url
+        a.download = `bursar-report-${selectedDate}-${user.username}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+        
+        toast.success('Report downloaded successfully!')
+      } else {
+        throw new Error('Failed to generate report')
       }
+    } catch (error) {
+      console.error('Report generation error:', error)
+      toast.error('Failed to generate report')
+    } finally {
+      setIsGeneratingReport(false)
     }
-    
-    // In a real app, this would generate and download a PDF report
-    console.log('Generating report:', reportData)
-    alert('Report generation feature will be implemented with PDF export')
   }
 
   return (
@@ -71,11 +103,21 @@ export function BursarReconciliation() {
         </div>
         <Button 
           onClick={generateReport}
+          disabled={isGeneratingReport}
           variant="outline" 
           className="border-slate-600 text-slate-300"
         >
-          <Download className="w-4 h-4 mr-2" />
-          Export Report
+          {isGeneratingReport ? (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+              Generating...
+            </div>
+          ) : (
+            <div className="flex items-center">
+              <Download className="w-4 h-4 mr-2" />
+              Export Report
+            </div>
+          )}
         </Button>
       </div>
 

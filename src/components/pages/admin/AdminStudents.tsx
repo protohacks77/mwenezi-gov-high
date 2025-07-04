@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge'
 import { useDataStore } from '@/store/dataStore'
 import { formatCurrency } from '@/lib/utils'
 import { CreateStudentModal } from '@/components/modals/CreateStudentModal'
+import { StudentDetailsModal } from '@/components/modals/StudentDetailsModal'
 
 export function AdminStudents() {
   const { students } = useDataStore()
@@ -27,6 +28,7 @@ export function AdminStudents() {
   const [filterType, setFilterType] = useState('all')
   const [filterGrade, setFilterGrade] = useState('all')
   const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null)
 
   const studentList = Object.values(students)
 
@@ -52,6 +54,10 @@ export function AdminStudents() {
     if (balance <= 0) return 'Paid'
     if (balance <= 100) return 'Partial'
     return 'Arrears'
+  }
+
+  const handleStudentClick = (studentId: string) => {
+    setSelectedStudentId(studentId)
   }
 
   return (
@@ -188,6 +194,7 @@ export function AdminStudents() {
                   key={student.id}
                   whileHover={{ scale: 1.02 }}
                   className="p-4 bg-slate-primary rounded-lg border border-slate-600 hover:border-slate-500 transition-colors cursor-pointer"
+                  onClick={() => handleStudentClick(student.id)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
@@ -244,6 +251,12 @@ export function AdminStudents() {
       <CreateStudentModal 
         isOpen={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
+      />
+
+      <StudentDetailsModal
+        isOpen={!!selectedStudentId}
+        onClose={() => setSelectedStudentId(null)}
+        studentId={selectedStudentId}
       />
     </div>
   )

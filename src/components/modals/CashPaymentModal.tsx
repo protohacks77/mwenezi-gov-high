@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { motion } from 'framer-motion'
-import { DollarSign, Save, X, Plus, Minus } from 'lucide-react'
+import { DollarSign, Save, X, Receipt } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -15,28 +15,25 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { useDataStore } from '@/store/dataStore'
 import { useAuthStore } from '@/store/authStore'
 import { formatCurrency } from '@/lib/utils'
 import toast from 'react-hot-toast'
 
-const feeAdjustmentSchema = z.object({
-  adjustmentAmount: z.number().positive('Amount must be positive'),
+const cashPaymentSchema = z.object({
+  amount: z.number().positive('Amount must be positive'),
   termKey: z.string().min(1, 'Term is required'),
-  reason: z.string().min(1, 'Reason is required'),
-  adjustmentType: z.enum(['debit', 'credit']),
 })
 
-type FeeAdjustmentFormData = z.infer<typeof feeAdjustmentSchema>
+type CashPaymentFormData = z.infer<typeof cashPaymentSchema>
 
-interface FeeAdjustmentModalProps {
+interface CashPaymentModalProps {
   isOpen: boolean
   onClose: () => void
   studentId: string | null
 }
 
-export function FeeAdjustmentModal({ isOpen, onClose, studentId }: FeeAdjustmentModalProps) {
+export function CashPaymentModal({ isOpen, onClose, studentId }: CashPaymentModalProps) {
   const { students, config } = useDataStore()
   const { user } = useAuthStore()
   const [isLoading, setIsLoading] = useState(false)
@@ -50,28 +47,27 @@ export function FeeAdjustmentModal({ isOpen, onClose, studentId }: FeeAdjustment
     reset,
     setValue,
     watch
-  } = useForm<FeeAdjustmentFormData>({
-    resolver: zodResolver(feeAdjustmentSchema),
+  } = useForm<CashPaymentFormData>({
+    resolver: zodResolver(cashPaymentSchema),
   })
 
-  const adjustmentType = watch('adjustmentType')
+  const selectedTerm = watch('termKey')
+  const amount = watch('amount')
 
-  const onSubmit = async (data: FeeAdjustmentFormData) => {
+  const onSubmit = async (data: CashPaymentFormData) => {
     if (!user || !student) return
     
     setIsLoading(true)
     try {
-      const response = await fetch('/.netlify/functions/applyFeeAdjustment', {
+      const response = await fetch('/.netlify/functions/processCashPayment', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           studentId: student.id,
-          adjustmentAmount: data.adjustmentAmount,
+          amount: data.amount,
           termKey: data.termKey,
-          reason: data.reason,
-          adjustmentType: data.adjustmentType,
           bursarId: user.id,
           bursarUsername: user.username
         })
@@ -80,15 +76,15 @@ export function FeeAdjustmentModal({ isOpen, onClose, studentId }: FeeAdjustment
       const result = await response.json()
 
       if (result.success) {
-        toast.success(`Fee adjustment applied successfully!`)
+        toast.success(`Payment processed successfully! Receipt: ${result.receiptNumber}`)
         reset()
         onClose()
       } else {
-        toast.error(result.error || 'Failed to apply adjustment')
+        toast.error(result.error || 'Failed to process payment')
       }
     } catch (error) {
-      console.error('Fee adjustment error:', error)
-      toast.error('Failed to apply adjustment. Please try again.')
+      console.error('Cash payment error:', error)
+      toast.error('Failed to process payment. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -99,6 +95,19 @@ export function FeeAdjustmentModal({ isOpen, onClose, studentId }: FeeAdjustment
     onClose()
   }
 
+  const getTermBalance = (termKey: string) => {
+    if (!student || !student.financials.terms[termKey]) return 0
+    const term = student.financials.terms[termKey]
+    return term.fee - term.paid
+  }
+
+  const setMaxAmount = () => {
+    if (selectedTerm) {
+      const maxAmount = getTermBalance(selectedTerm)
+      setValue('amount', maxAmount)
+    }
+  }
+
   if (!student) return null
 
   return (
@@ -107,10 +116,10 @@ export function FeeAdjustmentModal({ isOpen, onClose, studentId }: FeeAdjustment
         <DialogHeader>
           <DialogTitle className="text-white flex items-center">
             <DollarSign className="w-5 h-5 mr-2 text-amber-primary" />
-            Fee Adjustment
+            Process Cash Payment
           </DialogTitle>
           <DialogDescription className="text-slate-400">
-            Apply a fee adjustment for {student.name} {student.surname}
+            Process cash payment for {student.name} {student.surname}
           </DialogDescription>
         </DialogHeader>
 
@@ -127,58 +136,20 @@ export function FeeAdjustmentModal({ isOpen, onClose, studentId }: FeeAdjustment
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
-            <Label className="text-slate-200">Adjustment Type</Label>
-            <Select onValueChange={(value) => setValue('adjustmentType', value as any)}>
-              <SelectTrigger className="bg-slate-primary border-slate-600 text-white">
-                <SelectValue placeholder="Select adjustment type" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-primary border-slate-600">
-                <SelectItem value="credit">
-                  <div className="flex items-center">
-                    <Minus className="w-4 h-4 mr-2 text-green-500" />
-                    Credit (Reduce Balance)
-                  </div>
-                </SelectItem>
-                <SelectItem value="debit">
-                  <div className="flex items-center">
-                    <Plus className="w-4 h-4 mr-2 text-red-500" />
-                    Debit (Increase Balance)
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            {errors.adjustmentType && (
-              <p className="text-sm text-red-400">{errors.adjustmentType.message}</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="adjustmentAmount" className="text-slate-200">
-              Amount
-            </Label>
-            <Input
-              id="adjustmentAmount"
-              type="number"
-              step="0.01"
-              {...register('adjustmentAmount', { valueAsNumber: true })}
-              className="bg-slate-primary border-slate-600 text-white"
-              placeholder="Enter adjustment amount"
-            />
-            {errors.adjustmentAmount && (
-              <p className="text-sm text-red-400">{errors.adjustmentAmount.message}</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
             <Label className="text-slate-200">Term</Label>
             <Select onValueChange={(value) => setValue('termKey', value)}>
               <SelectTrigger className="bg-slate-primary border-slate-600 text-white">
                 <SelectValue placeholder="Select term" />
               </SelectTrigger>
               <SelectContent className="bg-slate-primary border-slate-600">
-                {config?.activeTerms.map((term) => (
-                  <SelectItem key={term} value={term}>
-                    {term.replace('_', ' ')}
+                {Object.entries(student.financials.terms).map(([termKey, term]) => (
+                  <SelectItem key={termKey} value={termKey}>
+                    <div className="flex justify-between items-center w-full">
+                      <span>{termKey.replace('_', ' ')}</span>
+                      <span className="ml-4 text-slate-400">
+                        Due: {formatCurrency(term.fee - term.paid)}
+                      </span>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -189,27 +160,56 @@ export function FeeAdjustmentModal({ isOpen, onClose, studentId }: FeeAdjustment
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="reason" className="text-slate-200">
-              Reason for Adjustment
-            </Label>
-            <Textarea
-              id="reason"
-              {...register('reason')}
+            <div className="flex justify-between items-center">
+              <Label htmlFor="amount" className="text-slate-200">
+                Payment Amount
+              </Label>
+              {selectedTerm && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={setMaxAmount}
+                  className="text-amber-primary hover:text-amber-secondary"
+                >
+                  Max: {formatCurrency(getTermBalance(selectedTerm))}
+                </Button>
+              )}
+            </div>
+            <Input
+              id="amount"
+              type="number"
+              step="0.01"
+              {...register('amount', { valueAsNumber: true })}
               className="bg-slate-primary border-slate-600 text-white"
-              placeholder="Enter reason for this adjustment..."
-              rows={3}
+              placeholder="Enter payment amount"
             />
-            {errors.reason && (
-              <p className="text-sm text-red-400">{errors.reason.message}</p>
+            {errors.amount && (
+              <p className="text-sm text-red-400">{errors.amount.message}</p>
             )}
           </div>
 
-          {/* Preview */}
-          {adjustmentType && (
+          {/* Payment Preview */}
+          {selectedTerm && amount > 0 && (
             <div className="p-3 bg-slate-primary rounded-lg border border-slate-600">
-              <p className="text-slate-300 text-sm">
-                This will {adjustmentType === 'credit' ? 'reduce' : 'increase'} the student's balance
-              </p>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-300">Term:</span>
+                <span className="text-white">{selectedTerm.replace('_', ' ')}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-300">Amount Due:</span>
+                <span className="text-white">{formatCurrency(getTermBalance(selectedTerm))}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-slate-300">Payment:</span>
+                <span className="text-green-400">{formatCurrency(amount)}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm font-medium border-t border-slate-600 pt-2 mt-2">
+                <span className="text-slate-300">Remaining:</span>
+                <span className={getTermBalance(selectedTerm) - amount <= 0 ? 'text-green-400' : 'text-amber-400'}>
+                  {formatCurrency(Math.max(0, getTermBalance(selectedTerm) - amount))}
+                </span>
+              </div>
             </div>
           )}
 
@@ -232,12 +232,12 @@ export function FeeAdjustmentModal({ isOpen, onClose, studentId }: FeeAdjustment
               {isLoading ? (
                 <div className="flex items-center">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                  Applying...
+                  Processing...
                 </div>
               ) : (
                 <div className="flex items-center">
-                  <Save className="w-4 h-4 mr-2" />
-                  Apply Adjustment
+                  <Receipt className="w-4 h-4 mr-2" />
+                  Process Payment
                 </div>
               )}
             </Button>

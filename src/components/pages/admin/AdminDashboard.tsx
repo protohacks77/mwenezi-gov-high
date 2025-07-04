@@ -5,7 +5,6 @@ import {
   DollarSign, 
   TrendingUp, 
   Activity,
-  LogOut,
   Settings
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,13 +13,16 @@ import { useAuthStore } from '@/store/authStore'
 import { useDataStore } from '@/store/dataStore'
 import { formatCurrency } from '@/lib/utils'
 
-export function AdminDashboard() {
-  const { logout } = useAuthStore()
+interface AdminDashboardProps {
+  onSettingsClick?: () => void
+}
+
+export function AdminDashboard({ onSettingsClick }: AdminDashboardProps) {
   const { students, transactions } = useDataStore()
 
   const totalStudents = Object.keys(students).length
   const totalBalance = Object.values(students).reduce((sum, student) => sum + student.financials.balance, 0)
-  const completedTransactions = Object.values(transactions).filter(t => t.status === 'completed').length
+  const completedTransactions = Object.values(transactions).filter(t => t.status === 'completed' || t.status === 'zb_payment_successful').length
   const recentTransactions = Object.values(transactions)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 5)
@@ -64,20 +66,17 @@ export function AdminDashboard() {
           <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
           <p className="text-slate-400 mt-1">Welcome back, manage your school efficiently</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Button variant="outline" size="sm" className="border-slate-600 text-slate-300">
+        {onSettingsClick && (
+          <Button 
+            onClick={onSettingsClick}
+            variant="outline" 
+            size="sm" 
+            className="border-slate-600 text-slate-300"
+          >
             <Settings className="w-4 h-4 mr-2" />
             Settings
           </Button>
-          <Button 
-            onClick={logout}
-            variant="destructive" 
-            size="sm"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Logout
-          </Button>
-        </div>
+        )}
       </div>
 
       {/* Dashboard Cards */}

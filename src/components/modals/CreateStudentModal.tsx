@@ -93,7 +93,7 @@ export function CreateStudentModal({ isOpen, onClose }: CreateStudentModalProps)
       const result = await response.json()
 
       if (result.success) {
-        toast.success(`Student ${data.name} ${data.surname} created successfully!`)
+        toast.success(`Student ${data.name} ${data.surname} created successfully! Login: ${data.studentNumber} / student123`)
         reset()
         onClose()
       } else {
