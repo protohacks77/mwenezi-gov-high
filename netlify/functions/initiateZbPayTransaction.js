@@ -133,16 +133,15 @@ exports.handler = async (event, context) => {
     };
     await db.ref(`transactions/${transactionId}`).set(pendingTransaction);
 
-    // 5. Construct the Correct ZbPay API Request Payload
-    // The payload now strictly adheres to the ZbPay API documentation.
-    const zbPayRequest = {
-      Amount: validatedData.amount,
-      CurrencyCode: currencyCode,
-      returnUrl: validatedData.returnUrl,
-      resultUrl: validatedData.resultUrl,
-      orderReference: orderReference,
-      itemName: `School Fees for ${student.name} ${student.surname}`,
-    };
+   // 5. Construct the ZbPay API Request Payload using consistent camelCase
+const zbPayRequest = {
+  amount: validatedData.amount,           // Corrected to camelCase
+  currencyCode: currencyCode,             // Corrected to camelCase
+  returnUrl: validatedData.returnUrl,
+  resultUrl: validatedData.resultUrl,
+  orderReference: orderReference,
+  itemName: `School Fees for ${student.name} ${student.surname}`,
+};
 
     console.log('📡 ZbPay request payload:', JSON.stringify(zbPayRequest, null, 2));
 
