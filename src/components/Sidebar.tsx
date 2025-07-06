@@ -17,7 +17,9 @@ import {
   TrendingUp
 } from 'lucide-react'
 import { Button } from './ui/button'
+import { Badge } from './ui/badge'
 import { useAuthStore } from '@/store/authStore'
+import { useDataStore } from '@/store/dataStore'
 import { cn } from '@/lib/utils'
 
 const adminNavItems = [
@@ -25,7 +27,7 @@ const adminNavItems = [
   { icon: Users, label: 'Manage Students', path: '/admin/students' },
   { icon: BarChart3, label: 'Financial Activity', path: '/admin/financial-activity' },
   { icon: Settings, label: 'Fee/Term Config', path: '/admin/config' },
-  { icon: Bell, label: 'Notifications', path: '/admin/notifications' },
+  { icon: Bell, label: 'Notifications', path: '/admin/notifications', hasNotifications: true },
 ]
 
 const bursarNavItems = [
@@ -45,6 +47,7 @@ interface SidebarProps {
 
 export function Sidebar({ onSettingsClick }: SidebarProps) {
   const { user, logout } = useAuthStore()
+  const { notifications } = useDataStore()
   const location = useLocation()
 
   const getNavItems = () => {
@@ -61,6 +64,11 @@ export function Sidebar({ onSettingsClick }: SidebarProps) {
   }
 
   const navItems = getNavItems()
+
+  // Get unread notifications count for current user
+  const unreadNotificationsCount = Object.values(notifications).filter(
+    n => n.userRole === user?.role && !n.read
+  ).length
 
   return (
     <motion.div
@@ -99,19 +107,28 @@ export function Sidebar({ onSettingsClick }: SidebarProps) {
         <nav className="flex-1 px-4 py-6 space-y-2">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path
+            const showNotificationBadge = item.hasNotifications && unreadNotificationsCount > 0
+            
             return (
               <Link key={item.path} to={item.path}>
                 <motion.div
                   whileHover={{ x: 4 }}
                   className={cn(
-                    "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
+                    "flex items-center justify-between px-3 py-2 rounded-lg transition-colors",
                     isActive 
                       ? "bg-maroon-primary text-white" 
                       : "text-slate-300 hover:bg-slate-700 hover:text-white"
                   )}
                 >
-                  <item.icon className="w-5 h-5" />
-                  <span className="text-sm font-medium">{item.label}</span>
+                  <div className="flex items-center space-x-3">
+                    <item.icon className="w-5 h-5" />
+                    <span className="text-sm font-medium">{item.label}</span>
+                  </div>
+                  {showNotificationBadge && (
+                    <Badge variant="destructive" className="text-xs min-w-[20px] h-5">
+                      {unreadNotificationsCount}
+                    </Badge>
+                  )}
                 </motion.div>
               </Link>
             )

@@ -5,7 +5,8 @@ import {
   Users, 
   Receipt,
   Search,
-  Eye
+  Eye,
+  FileText
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,11 +14,13 @@ import { Input } from '@/components/ui/input'
 import { useDataStore } from '@/store/dataStore'
 import { formatCurrency } from '@/lib/utils'
 import { CashPaymentModal } from '@/components/modals/CashPaymentModal'
+import { StudentReportModal } from '@/components/modals/StudentReportModal'
 
 export function BursarPayments() {
   const { students, transactions } = useDataStore()
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null)
+  const [reportStudentId, setReportStudentId] = useState<string | null>(null)
 
   const studentList = Object.values(students)
   const todayTransactions = Object.values(transactions).filter(t => 
@@ -38,6 +41,10 @@ export function BursarPayments() {
 
   const handleStudentClick = (studentId: string) => {
     setSelectedStudentId(studentId)
+  }
+
+  const handleGenerateReport = (studentId: string) => {
+    setReportStudentId(studentId)
   }
 
   return (
@@ -103,7 +110,7 @@ export function BursarPayments() {
         <CardHeader>
           <CardTitle className="text-white">Search Students</CardTitle>
           <CardDescription className="text-slate-400">
-            Find a student to process payment
+            Find a student to process payment or generate report
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -124,7 +131,7 @@ export function BursarPayments() {
         <CardHeader>
           <CardTitle className="text-white">Student List</CardTitle>
           <CardDescription className="text-slate-400">
-            Click on a student to process payment
+            Click on a student to process payment or generate their report
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -133,8 +140,7 @@ export function BursarPayments() {
               <motion.div
                 key={student.id}
                 whileHover={{ scale: 1.02 }}
-                className="flex items-center justify-between p-4 bg-slate-primary rounded-lg cursor-pointer hover:bg-slate-700 transition-colors"
-                onClick={() => handleStudentClick(student.id)}
+                className="flex items-center justify-between p-4 bg-slate-primary rounded-lg border border-slate-600"
               >
                 <div className="flex items-center space-x-4">
                   <div className={`w-3 h-3 rounded-full ${
@@ -159,9 +165,26 @@ export function BursarPayments() {
                     </p>
                     <p className="text-slate-400 text-sm">Balance</p>
                   </div>
-                  <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white">
-                    <Eye className="w-4 h-4" />
-                  </Button>
+                  <div className="flex space-x-2">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-slate-400 hover:text-white"
+                      onClick={() => handleStudentClick(student.id)}
+                      title="Process Payment"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-slate-400 hover:text-amber-400"
+                      onClick={() => handleGenerateReport(student.id)}
+                      title="Generate Report"
+                    >
+                      <FileText className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               </motion.div>
             ))}
@@ -173,6 +196,12 @@ export function BursarPayments() {
         isOpen={!!selectedStudentId}
         onClose={() => setSelectedStudentId(null)}
         studentId={selectedStudentId}
+      />
+
+      <StudentReportModal
+        isOpen={!!reportStudentId}
+        onClose={() => setReportStudentId(null)}
+        studentId={reportStudentId}
       />
     </div>
   )

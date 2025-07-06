@@ -1,16 +1,19 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Bell, CheckCircle, AlertCircle, Info, XCircle, BookMarked as MarkAsRead, Trash2, Filter } from 'lucide-react'
+import { Bell, CheckCircle, AlertCircle, Info, XCircle, BookMarked as MarkAsRead, Trash2, Filter, Eye } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDataStore } from '@/store/dataStore'
 import { formatDate } from '@/lib/utils'
+import { NotificationDetailModal } from '@/components/modals/NotificationDetailModal'
+import toast from 'react-hot-toast'
 
 export function AdminNotifications() {
   const { notifications } = useDataStore()
   const [filter, setFilter] = useState('all')
+  const [selectedNotification, setSelectedNotification] = useState<any>(null)
 
   const notificationList = Object.values(notifications)
     .filter(n => n.userRole === 'admin')
@@ -52,18 +55,77 @@ export function AdminNotifications() {
   }
 
   const markAsRead = async (notificationId: string) => {
-    // In a real app, this would call a Netlify function
-    console.log('Mark as read:', notificationId)
+    try {
+      const response = await fetch('/.netlify/functions/markNotificationAsRead', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ notificationId })
+      })
+
+      if (response.ok) {
+        toast.success('Notification marked as read')
+      } else {
+        throw new Error('Failed to mark as read')
+      }
+    } catch (error) {
+      console.error('Error marking notification as read:', error)
+      toast.error('Failed to mark notification as read')
+    }
   }
 
   const deleteNotification = async (notificationId: string) => {
-    // In a real app, this would call a Netlify function
-    console.log('Delete notification:', notificationId)
+    try {
+      const response = await fetch('/.netlify/functions/deleteNotification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ notificationId })
+      })
+
+      if (response.ok) {
+        toast.success('Notification deleted')
+      } else {
+        throw new Error('Failed to delete notification')
+      }
+    } catch (error) {
+      console.error('Error deleting notification:', error)
+      toast.error('Failed to delete notification')
+    }
   }
 
   const markAllAsRead = async () => {
-    // In a real app, this would call a Netlify function
-    console.log('Mark all as read')
+    try {
+      const unreadNotifications = notificationList.filter(n => !n.read)
+      const response = await fetch('/.netlify/functions/markAllNotificationsAsRead', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          notificationIds: unreadNotifications.map(n => n.id),
+          userRole: 'admin'
+        })
+      })
+
+      if (response.ok) {
+        toast.success('All notifications marked as read')
+      } else {
+        throw new Error('Failed to mark all as read')
+      }
+    } catch (error) {
+      console.error('Error marking all as read:', error)
+      toast.error('Failed to mark all notifications as read')
+    }
+  }
+
+  const handleNotificationClick = (notification: any) => {
+    setSelectedNotification(notification)
+    if (!notification.read) {
+      markAsRead(notification.id)
+    }
   }
 
   return (
@@ -179,7 +241,7 @@ export function AdminNotifications() {
             Notifications ({filteredNotifications.length})
           </CardTitle>
           <CardDescription className="text-slate-400">
-            Recent system activity and updates
+            Click on a notification to view details
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -189,9 +251,10 @@ export function AdminNotifications() {
                 <motion.div
                   key={notification.id}
                   whileHover={{ scale: 1.01 }}
-                  className={`p-4 bg-slate-primary rounded-lg border-l-4 ${getNotificationBorder(notification.type)} ${
+                  className={`p-4 bg-slate-primary rounded-lg border-l-4 cursor-pointer ${getNotificationBorder(notification.type)} ${
                     !notification.read ? 'bg-opacity-80' : 'bg-opacity-40'
                   }`}
+                  onClick={() => handleNotificationClick(notification)}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-3 flex-1">
@@ -206,6 +269,11 @@ export function AdminNotifications() {
                               New
                             </Badge>
                           )}
+                          {notification.read && (
+                            <Badge variant="outline" className="text-xs border-green-500 text-green-400">
+                              Opened
+                            </Badge>
+                          )}
                         </div>
                         <p className={`text-sm mt-1 ${!notification.read ? 'text-slate-300' : 'text-slate-400'}`}>
                           {notification.message}
@@ -216,11 +284,25 @@ export function AdminNotifications() {
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedNotification(notification)
+                        }}
+                        className="text-slate-400 hover:text-white"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
                       {!notification.read && (
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => markAsRead(notification.id)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            markAsRead(notification.id)
+                          }}
                           className="text-slate-400 hover:text-white"
                         >
                           <CheckCircle className="w-4 h-4" />
@@ -229,7 +311,10 @@ export function AdminNotifications() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => deleteNotification(notification.id)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteNotification(notification.id)
+                        }}
                         className="text-slate-400 hover:text-red-400"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -247,6 +332,14 @@ export function AdminNotifications() {
           </div>
         </CardContent>
       </Card>
+
+      <NotificationDetailModal
+        isOpen={!!selectedNotification}
+        onClose={() => setSelectedNotification(null)}
+        notification={selectedNotification}
+        onMarkAsRead={markAsRead}
+        onDelete={deleteNotification}
+      />
     </div>
   )
 }
